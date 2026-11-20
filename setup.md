@@ -43,10 +43,10 @@ Visit:
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@college.edu | Admin@123 |
-| Teacher | vivek@college.edu | Teacher@123 |
-| Student | aarav@college.edu | Student@123 |
-| Student | riya@college.edu | Student@123 |
+| Admin | admin@studyhub.in | AdminStudyHub |
+| Teacher | vivek@studyhub.in | Teacher@123 |
+| Student | aarav@studyhub.in | Student@123 |
+| Student | riya@studyhub.in | Student@123 |
 
 ## Smart authentication
 There is **one login page** and **one student registration page**.
