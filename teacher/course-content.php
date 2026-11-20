@@ -1,0 +1,194 @@
+<?php
+$pageTitle='Course Content';
+$active='course-content';
+require_once __DIR__.'/../includes/auth.php';
+require_role('teacher');
+require_once __DIR__.'/../includes/ui.php';
+$teacherId=(int)user()['id'];
+$courseId=(int)($_GET['course_id']??$_POST['course_id']??0);
+if(!$courseId){
+    $st=$pdo->prepare('SELECT id,title,status FROM courses WHERE teacher_id=? ORDER BY title');
+    $st->execute([$teacherId]);
+    $available=$st->fetchAll();
+    require_once __DIR__.'/../includes/app_start.php';
+    echo '<div class="page-header"><div><div class="section-kicker mb-2">Course content</div><h1>Choose a course</h1><p>Select one of your courses to manage modules and lessons.</p></div></div><div class="row g-3">';
+    foreach($available as $c){
+        echo '<div class="col-md-6 col-xl-4"><div class="card p-4 h-100"><div class="d-flex justify-content-between"><h4 class="h5">'.e($c['title']).'</h4>'.badgeSoft(ucfirst($c['status']),$c['status']==='published'?'success':'secondary').'</div><a class="btn btn-primary mt-3" href="course-content.php?course_id='.$c['id'].'">Manage Content</a></div></div>';
+    }
+    if(!$available)echo '<div class="col-12"><div class="card empty-state"><div class="icon"><i class="bi bi-layers"></i></div><h5>No courses yet</h5><a href="course-form.php" class="btn btn-primary">Create Course</a></div></div>';
+    echo '</div>';
+    include __DIR__.'/../includes/app_end.php';
+    exit;
+}
+$course=ensure_course_owner($courseId,$teacherId);
+$error='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+    verify_csrf();
+    try{
+        $action=$_POST['action']??'';
+        if($action==='add_module'){
+            $title=trim($_POST['title']??'');
+            if($title==='')throw new RuntimeException('Module title is required.');
+            $q=$pdo->prepare('SELECT COALESCE(MAX(sort_order),0)+1 FROM course_modules WHERE course_id=?');
+            $q->execute([$courseId]);
+            $order=(int)$q->fetchColumn();
+            $pdo->prepare('INSERT INTO course_modules(course_id,title,sort_order) VALUES(?,?,?)')->execute([$courseId,$title,$order]);
+            flash('success','Module added.');
+        }
+        elseif($action==='delete_module'){
+            $pdo->prepare('DELETE FROM course_modules WHERE id=? AND course_id=?')->execute([(int)$_POST['module_id'],$courseId]);
+            flash('success','Module deleted.');
+        }
+        elseif($action==='add_lecture'){
+            $module=(int)$_POST['module_id'];
+            $check=$pdo->prepare('SELECT id FROM course_modules WHERE id=? AND course_id=?');
+            $check->execute([$module,$courseId]);
+            if(!$check->fetchColumn())throw new RuntimeException('Invalid module.');
+            $title=trim($_POST['title']??'');
+            $type=$_POST['lesson_type']??'article';
+            $content=trim($_POST['content']??'');
+            if($title==='')throw new RuntimeException('Lecture title is required.');
+            if(!in_array($type,['article','pdf','link'],true))$type='article';
+            $file=null;
+            if($type==='pdf')$file=upload_file('file','materials',['pdf'],52428800);
+            $q=$pdo->prepare('SELECT COALESCE(MAX(sort_order),0)+1 FROM lectures WHERE module_id=?');
+            $q->execute([$module]);
+            $order=(int)$q->fetchColumn();
+            $pdo->prepare('INSERT INTO lectures(module_id,title,lesson_type,content,file_path,duration_minutes,sort_order) VALUES(?,?,?,?,?,?,?)')->execute([$module,$title,$type,$content,$file,(int)($_POST['duration_minutes']??0),$order]);
+            notify_course_students($courseId,'New course content','New lesson "'.$title.'" is available in '.$course['title'].'.');
+            flash('success','Lesson added.');
+        }
+        elseif($action==='delete_lecture'){
+            $pdo->prepare('DELETE l FROM lectures l JOIN course_modules m ON m.id=l.module_id WHERE l.id=? AND m.course_id=?')->execute([(int)$_POST['lecture_id'],$courseId]);
+            flash('success','Lesson deleted.');
+        }
+        redirect('course-content.php?course_id='.$courseId);
+    }
+    catch(Throwable $e){
+        $error=$e->getMessage();
+    }
+}
+$mods=$pdo->prepare('SELECT * FROM course_modules WHERE course_id=? ORDER BY sort_order,id');
+$mods->execute([$courseId]);
+$modules=$mods->fetchAll();
+foreach($modules as &$m){
+    $ls=$pdo->prepare('SELECT * FROM lectures WHERE module_id=? ORDER BY sort_order,id');
+    $ls->execute([$m['id']]);
+    $m['lectures']=$ls->fetchAll();
+}
+unset($m);
+include __DIR__.'/../includes/app_start.php';
+?>
+<div class="page-header">
+<div>
+<a class="small" href="courses.php">
+<i class="bi bi-arrow-left me-1">
+</i>Back to courses</a>
+<h1 class="mt-2"><?=e($course['title'])?></h1>
+<p>Organize modules, lessons, materials, and learning sequence.</p>
+</div>
+<a href="course-form.php?id=<?=$courseId?>" class="btn btn-light">Edit Course</a>
+</div>
+<?php
+if($error):?><div class="alert alert-danger"><?=e($error)?></div>
+<?php
+endif;
+?><div class="card p-4 mb-4">
+<h4>Add Module</h4>
+<form class="row g-2 mt-2" method="post"><?=csrf_input()?><input type="hidden" name="course_id" value="<?=$courseId?>">
+<input type="hidden" name="action" value="add_module">
+<div class="col-md-9">
+<input name="title" class="form-control" placeholder="Module title" required>
+</div>
+<div class="col-md-3">
+<button class="btn btn-primary w-100">Add Module</button>
+</div>
+</form>
+</div>
+<?php
+foreach($modules as $m):?><div class="card p-4 mb-4">
+<div class="d-flex justify-content-between align-items-center">
+<div>
+<div class="small text-muted">Module <?=e($m['sort_order'])?></div>
+<h4 class="mb-0"><?=e($m['title'])?></h4>
+</div>
+<form method="post" data-confirm="Delete this module and all its lessons?"><?=csrf_input()?><input type="hidden" name="course_id" value="<?=$courseId?>">
+<input type="hidden" name="action" value="delete_module">
+<input type="hidden" name="module_id" value="<?=$m['id']?>">
+<button class="btn btn-sm btn-outline-danger">Delete</button>
+</form>
+</div>
+<div class="mt-3">
+<?php
+foreach($m['lectures'] as $l):?><div class="border rounded-3 p-3 mb-2 d-flex justify-content-between align-items-center">
+<div>
+<div class="fw-semibold">
+<i class="bi bi-journal-text me-2">
+</i><?=e($l['title'])?></div>
+<div class="small text-muted"><?=e($l['lesson_type']==='article'?'Reading':($l['lesson_type']==='pdf'?'PDF reading':ucfirst($l['lesson_type'])))?> · <?=e($l['duration_minutes'])?> min</div>
+</div>
+<form method="post" data-confirm="Delete this lesson?"><?=csrf_input()?><input type="hidden" name="course_id" value="<?=$courseId?>">
+<input type="hidden" name="action" value="delete_lecture">
+<input type="hidden" name="lecture_id" value="<?=$l['id']?>">
+<button class="btn btn-sm btn-outline-danger">
+<i class="bi bi-trash">
+</i>
+</button>
+</form>
+</div>
+<?php
+endforeach;
+?></div>
+<hr>
+<h5>Add lesson</h5>
+<form method="post" enctype="multipart/form-data" class="row g-3"><?=csrf_input()?><input type="hidden" name="course_id" value="<?=$courseId?>">
+<input type="hidden" name="action" value="add_lecture">
+<input type="hidden" name="module_id" value="<?=$m['id']?>">
+<div class="col-md-6">
+<label class="form-label">Title</label>
+<input name="title" class="form-control" required>
+</div>
+<div class="col-md-3">
+<label class="form-label">Type</label>
+<select name="lesson_type" class="form-select">
+<option value="article">Reading</option>
+<option value="pdf">PDF reading</option>
+<option value="link">External link</option>
+</select>
+</div>
+<div class="col-md-3">
+<label class="form-label">Duration (min)</label>
+<input name="duration_minutes" type="number" min="0" class="form-control" value="10">
+</div>
+<div class="col-12">
+<label class="form-label">Reading content / link</label>
+<textarea name="content" class="form-control" rows="3" placeholder="Write the reading material here, or paste a link...">
+</textarea>
+</div>
+<div class="col-md-8">
+<label class="form-label">PDF file (optional)</label>
+<input name="file" type="file" class="form-control">
+</div>
+<div class="col-md-4 d-flex align-items-end">
+<button class="btn btn-outline-primary w-100">Add Lesson</button>
+</div>
+</form>
+</div>
+<?php
+endforeach;
+?>
+<?php
+if(!$modules):?><div class="card empty-state">
+<div class="icon">
+<i class="bi bi-layers">
+</i>
+</div>
+<h5>No modules yet</h5>
+<p class="text-muted">Add the first module above.</p>
+</div>
+<?php
+endif;
+?>
+<?php
+include __DIR__.'/../includes/app_end.php';
+?>

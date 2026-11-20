@@ -1,0 +1,51 @@
+<?php
+$pageTitle='Certificate';
+$active='learning';
+require_once __DIR__.'/../includes/auth.php';
+require_role('student');
+$id=(int)user()['id'];
+$courseId=(int)($_GET['course_id']??0);
+$st=$pdo->prepare("SELECT c.*,e.progress_percent,u.full_name teacher FROM enrollments e JOIN courses c ON c.id=e.course_id JOIN users u ON u.id=c.teacher_id WHERE e.student_id=? AND e.course_id=?");
+$st->execute([$id,$courseId]);
+$row=$st->fetch();
+if(!$row){
+    flash('danger','Course enrollment not found.');
+    redirect('learning.php');
+}
+if((float)$row['progress_percent']<100){
+    flash('warning','Complete the course before accessing the certificate.');
+    redirect('learning.php?course_id='.$courseId);
+}
+require_once __DIR__.'/../includes/header.php';
+?>
+<div class="container py-5">
+<div class="d-flex justify-content-between mb-4">
+<a href="learning.php?course_id=<?=$courseId?>" class="btn btn-light">
+<i class="bi bi-arrow-left me-1">
+</i>Back to learning</a>
+<button onclick="window.print()" class="btn btn-primary">
+<i class="bi bi-printer me-1">
+</i>Print Certificate</button>
+</div>
+<div class="card p-5 text-center" style="border:10px double #dbeafe;min-height:560px;display:grid;place-items:center">
+<div>
+<div class="section-kicker">Certificate of Completion</div>
+<div class="mb-3">
+<img src="../assets/images/studyhub-logo.svg" alt="StudyHub logo" style="width:64px;height:64px">
+</div>
+<div class="display-5 fw-bold mt-3">StudyHub LMS</div>
+<p class="text-muted mt-4 mb-2">This certifies that</p>
+<h1 class="display-4 fw-bold"> <?=e(user()['full_name'])?> </h1>
+<p class="text-muted mt-4 mb-2">has successfully completed</p>
+<h2 class="fw-bold"> <?=e($row['title'])?> </h2>
+<p class="text-muted mt-3">Instructor: <?=e($row['teacher'])?></p>
+<p class="text-muted">Completed on <?=e(date('d M Y'))?></p>
+<div class="mt-5">⭐ ⭐ ⭐</div>
+</div>
+</div>
+</div>
+<style>@media print{body{background:#fff}.site-footer{display:none}.btn{display:none!important}.card{box-shadow:none!important}}</style>
+<?php
+$basePath='../';
+include __DIR__.'/../includes/footer.php';
+?>

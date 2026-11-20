@@ -1,0 +1,63 @@
+<?php
+$pageTitle='Students';
+$active='students';
+require_once __DIR__.'/../includes/auth.php';
+require_role('teacher');
+$id=(int)user()['id'];
+$st=$pdo->prepare("SELECT u.id,u.full_name,u.email,u.enrollment_no,u.department,u.semester,u.status,COUNT(DISTINCT e.course_id) course_count FROM users u JOIN enrollments e ON e.student_id=u.id JOIN courses c ON c.id=e.course_id WHERE c.teacher_id=? GROUP BY u.id ORDER BY u.full_name");
+$st->execute([$id]);
+$rows=$st->fetchAll();
+require_once __DIR__.'/../includes/app_start.php';
+?>
+<div class="page-header">
+<div>
+<div class="section-kicker mb-2">Learners</div>
+<h1>Students</h1>
+<p>Students enrolled in your courses.</p>
+</div>
+</div>
+<div class="card p-0 overflow-hidden">
+<div class="table-responsive border-0">
+<table class="table">
+<thead>
+<tr>
+<th class="ps-4">Student</th>
+<th>Enrollment No.</th>
+<th>Department</th>
+<th>Semester</th>
+<th>Courses</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<?php
+foreach($rows as $r):?><tr>
+<td class="ps-4">
+<div class="fw-semibold"><?=e($r['full_name'])?></div>
+<div class="small text-muted"><?=e($r['email'])?></div>
+</td>
+<td><?=e($r['enrollment_no']??'—')?></td>
+<td><?=e($r['department']??'—')?></td>
+<td><?=e($r['semester']??'—')?></td>
+<td><?=e($r['course_count'])?></td>
+<td><?=badgeSoft(ucfirst($r['status']),$r['status']==='active'?'success':'secondary')?></td>
+</tr>
+<?php
+endforeach;
+?></tbody>
+</table>
+</div>
+<?php
+if(!$rows):?><div class="empty-state">
+<div class="icon">
+<i class="bi bi-people">
+</i>
+</div>
+<h5>No students yet</h5>
+</div>
+<?php
+endif;
+?></div>
+<?php
+include __DIR__.'/../includes/app_end.php';
+?>

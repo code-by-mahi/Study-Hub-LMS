@@ -1,0 +1,97 @@
+<?php
+$pageTitle='Announcements';
+$active='announcements';
+require_once __DIR__.'/../includes/auth.php';
+require_role('admin');
+$error='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+    verify_csrf();
+    try{
+        $action=$_POST['action']??'';
+        if($action==='add'){
+            $title=trim($_POST['title']??'');
+            $content=trim($_POST['content']??'');
+            $audience=$_POST['audience']??'all';
+            if($title===''||$content==='')throw new RuntimeException('Title and content are required.');
+            if(!in_array($audience,['all','students','teachers'],true))$audience='all';
+            $pdo->prepare('INSERT INTO announcements(author_id,title,content,audience) VALUES(?,?,?,?)')->execute([user()['id'],$title,$content,$audience]);
+            $role=$audience==='students'?'student':($audience==='teachers'?'teacher':null);
+            if($role){
+                $s=$pdo->prepare("SELECT id FROM users WHERE role=? AND status='active'");
+                $s->execute([$role]);
+                foreach($s->fetchAll(PDO::FETCH_COLUMN) as $uid)add_notification((int)$uid,'New announcement',$title);
+            }
+            else{
+                foreach($pdo->query("SELECT id FROM users WHERE status='active'")->fetchAll(PDO::FETCH_COLUMN) as $uid)add_notification((int)$uid,'New announcement',$title);
+            }
+            flash('success','Announcement published.');
+        }
+        elseif($action==='delete'){
+            $pdo->prepare('DELETE FROM announcements WHERE id=?')->execute([(int)$_POST['id']]);
+            flash('success','Announcement deleted.');
+        }
+        redirect('announcements.php');
+    }
+    catch(Throwable $e){
+        $error=$e->getMessage();
+    }
+}
+$rows=$pdo->query('SELECT a.*,u.full_name author FROM announcements a JOIN users u ON u.id=a.author_id ORDER BY a.created_at DESC')->fetchAll();
+require_once __DIR__.'/../includes/app_start.php';
+?>
+<div class="page-header">
+<div>
+<div class="section-kicker mb-2">Communication</div>
+<h1>Announcements</h1>
+<p>Publish college-wide updates and important notices.</p>
+</div>
+</div>
+<?php
+if($error):?><div class="alert alert-danger"><?=e($error)?></div>
+<?php
+endif;
+?><div class="card p-4 mb-4">
+<h4>New Announcement</h4>
+<form method="post" class="row g-3 mt-1"><?=csrf_input()?><input type="hidden" name="action" value="add">
+<div class="col-md-8">
+<label class="form-label">Title</label>
+<input name="title" class="form-control" required>
+</div>
+<div class="col-md-4">
+<label class="form-label">Audience</label>
+<select name="audience" class="form-select">
+<option value="all">Everyone</option>
+<option value="students">Students</option>
+<option value="teachers">Teachers</option>
+</select>
+</div>
+<div class="col-12">
+<label class="form-label">Message</label>
+<textarea name="content" class="form-control" rows="4" required>
+</textarea>
+</div>
+<div class="col-12">
+<button class="btn btn-primary">Publish</button>
+</div>
+</form>
+</div>
+<?php
+foreach($rows as $r):?><div class="card p-4 mb-3">
+<div class="d-flex justify-content-between">
+<div>
+<h5><?=e($r['title'])?></h5>
+<div class="small text-muted">By <?=e($r['author'])?> · <?=e($r['audience'])?> · <?=e(date('d M Y, h:i A',strtotime($r['created_at'])))?></div>
+</div>
+<form method="post" data-confirm="Delete this announcement?"><?=csrf_input()?><input type="hidden" name="action" value="delete">
+<input type="hidden" name="id" value="<?=$r['id']?>">
+<button class="btn btn-sm btn-outline-danger">Delete</button>
+</form>
+</div>
+<p class="text-muted mt-3 mb-0"><?=nl2br(e($r['content']))?></p>
+</div>
+<?php
+endforeach;
+?>
+<?php
+include __DIR__.'/../includes/app_end.php';
+?>

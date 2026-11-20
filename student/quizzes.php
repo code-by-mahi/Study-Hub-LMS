@@ -1,0 +1,54 @@
+<?php
+$pageTitle='Quizzes';
+$active='quizzes';
+require_once __DIR__.'/../includes/auth.php';
+require_role('student');
+$id=(int)user()['id'];
+$st=$pdo->prepare("SELECT q.*,c.title course_title,(SELECT COUNT(*) FROM questions qu WHERE qu.quiz_id=q.id) question_count,(SELECT MAX(percentage) FROM quiz_attempts qa WHERE qa.quiz_id=q.id AND qa.student_id=?) best_score FROM quizzes q JOIN courses c ON c.id=q.course_id JOIN enrollments e ON e.course_id=c.id AND e.student_id=? WHERE q.status='published' ORDER BY q.created_at DESC");
+$st->execute([$id,$id]);
+$quizzes=$st->fetchAll();
+require_once __DIR__.'/../includes/app_start.php';
+?>
+<div class="page-header">
+<div>
+<div class="section-kicker mb-2">Knowledge checks</div>
+<h1>Quizzes</h1>
+<p>Take published quizzes and review your best score.</p>
+</div>
+</div>
+<div class="row g-4">
+<?php
+foreach($quizzes as $q):?><div class="col-md-6 col-xl-4">
+<div class="card p-4 h-100">
+<div class="d-flex justify-content-between">
+<span><?=badgeSoft($q['course_title'],'primary')?></span>
+<span class="small text-muted"><?=e($q['time_limit_minutes'])?> min</span>
+</div>
+<h4 class="h5 mt-3"><?=e($q['title'])?></h4>
+<p class="small text-muted"><?=e($q['question_count'])?> questions</p>
+<?php
+if($q['best_score']!==null):?><div class="small mb-2">Best score: <strong><?=e(round((float)$q['best_score']))?>%</strong>
+</div>
+<?php
+endif;
+?><a class="btn btn-primary btn-sm mt-auto" href="quiz-attempt.php?id=<?=$q['id']?>">Start Quiz</a>
+</div>
+</div>
+<?php
+endforeach;
+?></div>
+<?php
+if(!$quizzes):?><div class="card empty-state">
+<div class="icon">
+<i class="bi bi-ui-checks">
+</i>
+</div>
+<h5>No quizzes available</h5>
+<p class="text-muted">Published quizzes from your enrolled courses appear here.</p>
+</div>
+<?php
+endif;
+?>
+<?php
+include __DIR__.'/../includes/app_end.php';
+?>

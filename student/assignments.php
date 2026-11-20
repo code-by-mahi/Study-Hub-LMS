@@ -1,0 +1,66 @@
+<?php
+$pageTitle='Assignments';
+$active='assignments';
+require_once __DIR__.'/../includes/auth.php';
+require_role('student');
+$id=(int)user()['id'];
+$st=$pdo->prepare("SELECT a.*,c.title course_title,(SELECT s.status FROM submissions s WHERE s.assignment_id=a.id AND s.student_id=? LIMIT 1) submission_status,(SELECT s.marks FROM submissions s WHERE s.assignment_id=a.id AND s.student_id=? LIMIT 1) marks FROM assignments a JOIN courses c ON c.id=a.course_id JOIN enrollments e ON e.course_id=c.id AND e.student_id=? WHERE a.status<>'draft' ORDER BY a.deadline");
+$st->execute([$id,$id,$id]);
+$rows=$st->fetchAll();
+require_once __DIR__.'/../includes/app_start.php';
+?>
+<div class="page-header">
+<div>
+<div class="section-kicker mb-2">Coursework</div>
+<h1>Assignments</h1>
+<p>Submit your work and track grading feedback.</p>
+</div>
+</div>
+<div class="card p-0 overflow-hidden">
+<div class="table-responsive border-0">
+<table class="table">
+<thead>
+<tr>
+<th class="ps-4">Assignment</th>
+<th>Course</th>
+<th>Deadline</th>
+<th>Status</th>
+<th>Marks</th>
+<th class="pe-4">Action</th>
+</tr>
+</thead>
+<tbody>
+<?php
+foreach($rows as $r):?><tr>
+<td class="ps-4">
+<div class="fw-semibold"><?=e($r['title'])?></div>
+<div class="small text-muted">Max <?=e($r['max_marks'])?></div>
+</td>
+<td><?=e($r['course_title'])?></td>
+<td><?=e($r['deadline']?date('d M Y, h:i A',strtotime($r['deadline'])):'—')?></td>
+<td><?=badgeSoft($r['submission_status']?ucfirst($r['submission_status']):'Not submitted',$r['submission_status']==='graded'?'success':($r['submission_status']?'warning':'secondary'))?></td>
+<td><?=e($r['marks']!==null?(string)$r['marks']:'—')?></td>
+<td class="pe-4">
+<a class="btn btn-sm btn-light" href="assignment-details.php?id=<?=$r['id']?>">Open</a>
+</td>
+</tr>
+<?php
+endforeach;
+?></tbody>
+</table>
+</div>
+<?php
+if(!$rows):?><div class="empty-state">
+<div class="icon">
+<i class="bi bi-check2-square">
+</i>
+</div>
+<h5>No assignments</h5>
+<p class="text-muted mb-0">Enroll in a course to receive assignments.</p>
+</div>
+<?php
+endif;
+?></div>
+<?php
+include __DIR__.'/../includes/app_end.php';
+?>

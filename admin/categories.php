@@ -1,0 +1,81 @@
+<?php
+$pageTitle='Categories';
+$active='categories';
+require_once __DIR__.'/../includes/auth.php';
+require_role('admin');
+$error='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+    verify_csrf();
+    try{
+        if(($_POST['action']??'')==='add'){
+            $name=trim($_POST['name']??'');
+            if($name==='')throw new RuntimeException('Category name is required.');
+            $pdo->prepare('INSERT INTO categories(name) VALUES(?)')->execute([$name]);
+            flash('success','Category added.');
+        }
+        elseif(($_POST['action']??'')==='delete'){
+            $pdo->prepare('DELETE FROM categories WHERE id=?')->execute([(int)$_POST['id']]);
+            flash('success','Category deleted.');
+        }
+        redirect('categories.php');
+    }
+    catch(Throwable $e){
+        $error=$e->getMessage();
+    }
+}
+$rows=$pdo->query('SELECT cat.*,COUNT(c.id) course_count FROM categories cat LEFT JOIN courses c ON c.category_id=cat.id GROUP BY cat.id ORDER BY cat.name')->fetchAll();
+require_once __DIR__.'/../includes/app_start.php';
+?>
+<div class="page-header">
+<div>
+<div class="section-kicker mb-2">Catalog structure</div>
+<h1>Categories</h1>
+<p>Organize courses into clear subject areas.</p>
+</div>
+</div>
+<?php
+if($error):?><div class="alert alert-danger"><?=e($error)?></div>
+<?php
+endif;
+?><div class="card p-4 mb-4">
+<h4>Add Category</h4>
+<form method="post" class="row g-2 mt-1"><?=csrf_input()?><input type="hidden" name="action" value="add">
+<div class="col-md-8">
+<input name="name" class="form-control" placeholder="Category name" required>
+</div>
+<div class="col-md-4">
+<button class="btn btn-primary w-100">Add Category</button>
+</div>
+</form>
+</div>
+<div class="card p-0 overflow-hidden">
+<div class="table-responsive border-0">
+<table class="table">
+<thead>
+<tr>
+<th class="ps-4">Category</th>
+<th>Courses</th>
+<th class="pe-4">Action</th>
+</tr>
+</thead>
+<tbody>
+<?php
+foreach($rows as $r):?><tr>
+<td class="ps-4 fw-semibold"><?=e($r['name'])?></td>
+<td><?=e($r['course_count'])?></td>
+<td class="pe-4">
+<form method="post" class="d-inline" data-confirm="Delete this category? Courses will become uncategorized."><?=csrf_input()?><input type="hidden" name="action" value="delete">
+<input type="hidden" name="id" value="<?=$r['id']?>">
+<button class="btn btn-sm btn-outline-danger">Delete</button>
+</form>
+</td>
+</tr>
+<?php
+endforeach;
+?></tbody>
+</table>
+</div>
+</div>
+<?php
+include __DIR__.'/../includes/app_end.php';
+?>
